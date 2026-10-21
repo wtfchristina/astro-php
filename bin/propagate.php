@@ -1,85 +1,74 @@
-#!/usr/bin/env php
 <?php
 
 declare(strict_types=1);
 
-require __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
 use Astro\Coordinate\KeplerianElements;
-use Astro\Force\EarthGravityModel;
+use Astro\Force\AtmosphericDrag;
+use Astro\Force\GeopotentialJ2;
+use Astro\Force\TwoBodyGravity;
 use Astro\Integrator\RungeKutta4;
 use Astro\Serializer\CzmlWriter;
 
-echo "====================================================\n";
-echo "   AstroPHP: Numerical Orbit Propagator (J2 Perturbed)\n";
-echo "====================================================\n\n";
+echo "=================================================\n";
+echo " AstroPHP: Multi-Force Cowell Propagator (J2 + Drag)\n";
+echo "=================================================\n\n";
 
-// 1. Mission setup: 700 km Sun-Synchronous Orbit (SSO)
-$altitudeMeters = 700_000.0;
-$semiMajorAxis = EarthGravityModel::R_EARTH + $altitudeMeters;
-$eccentricity = 0.0012;
-$inclinationDeg = 98.2;
-$raanDeg = 45.0;
-
-$orbit = new KeplerianElements(
-    semiMajorAxis: $semiMajorAxis,
-    eccentricity: $eccentricity,
-    inclination: deg2rad($inclinationDeg),
-    raan: deg2rad($raanDeg),
-    argPerigee: deg2rad(0.0),
-    meanAnomaly: deg2rad(0.0)
+// semiMajorAxis, eccentricity, inclination, raan, argPerigee, meanAnomaly
+$elements = new KeplerianElements(
+    7078.137,
+    0.001,
+    98.2,
+    45.0,
+    0.0,
+    0.0
 );
 
+$initialState = $elements->toStateVector();
+
 echo "Initial Orbit Parameters:\n";
-echo " • Semi-Major Axis : " . number_format($semiMajorAxis / 1000, 2) . " km\n";
-echo " • Altitude         : " . number_format($altitudeMeters / 1000, 2) . " km\n";
-echo " • Inclination      : {$inclinationDeg}° (Sun-Synchronous)\n";
-echo " • RAAN (Ω)         : {$raanDeg}°\n\n";
+echo " • Semi-Major Axis : 7,078.14 km\n";
+echo " • Altitude         : 700.00 km\n";
+echo " • Inclination      : 98.2° (Sun-Synchronous)\n";
+echo " • RAAN (Ω)         : 45°\n\n";
 
-$initialState = $orbit->toStateVector();
-$r0 = $initialState->position;
-$v0 = $initialState->velocity;
+$forces = [
+    new TwoBodyGravity(),
+    new GeopotentialJ2(),
+    new AtmosphericDrag(0.015),
+];
 
-echo "Cartesian State Vector at Epoch t=0 (ECI Frame):\n";
-printf(" • Position [km]: [%10.3f, %10.3f, %10.3f] (Mag: %.2f km)\n", 
-    $r0->x / 1000, $r0->y / 1000, $r0->z / 1000, $r0->magnitude() / 1000);
-printf(" • Velocity [km/s]: [%7.3f, %7.3f, %7.3f] (Mag: %.3f km/s)\n\n", 
-    $v0->x / 1000, $v0->y / 1000, $v0->z / 1000, $v0->magnitude() / 1000);
+$integrator = new RungeKutta4($forces);
 
-// 2. Numerical Integration Setup
-$gravity = new EarthGravityModel();
-$integrator = new RungeKutta4($gravity);
+$epoch = new DateTimeImmutable('2026-10-21T22:00:00Z');
+$periodSeconds = 2.0 * M_PI * sqrt((7078.137 ** 3) / 398600.4418);
+$totalDuration = $periodSeconds * 3.0; // 3 complete revolutions
+$stepSize = 15.0; // 15s integration step
 
-$orbitalPeriod = 2.0 * M_PI * sqrt(($semiMajorAxis ** 3) / EarthGravityModel::MU);
-$totalDuration = $orbitalPeriod * 3.0; // Propagate 3 revolutions
-$dt = 15.0; // 15-second integration timestep
-$steps = (int)ceil($totalDuration / $dt);
+echo "Propagating 3 revolutions (" . number_format($totalDuration, 0) . " s, dt={$stepSize}s)...\n";
+$startBenchmark = hrtime(true);
 
-echo "Propagating 3 revolutions (" . number_format($totalDuration, 0) . " s, dt={$dt}s)...\n";
-
-$startTime = microtime(true);
 $trajectory = [];
-$state = $initialState;
-$baseEpoch = time();
+$currentTime = 0.0;
+$currentState = $initialState;
 
-for ($i = 0; $i <= $steps; $i++) {
-    $t = $i * $dt;
-    $currentEpochStr = gmdate('Y-m-d\TH:i:s\Z', (int)($baseEpoch + $t));
+while ($currentTime <= $totalDuration) {
+    $currentEpoch = $epoch->modify('+' . (int)round($currentTime) . ' seconds');
     $trajectory[] = [
-        'epoch' => $currentEpochStr,
-        'state' => $state,
+        'epoch' => $currentEpoch->format('Y-m-d\TH:i:s\Z'),
+        'state' => $currentState,
     ];
-    $state = $integrator->step($state, (float)$t, $dt);
+
+    $currentState = $integrator->step($currentState, $currentTime, $stepSize);
+    $currentTime += $stepSize;
 }
 
-$elapsed = (microtime(true) - $startTime) * 1000;
-printf("Propagation completed in %.2f ms (%d state points generated).\n\n", $elapsed, count($trajectory));
+$elapsedMs = (hrtime(true) - $startBenchmark) / 1e6;
+echo "Propagation completed in " . number_format($elapsedMs, 2) . " ms (" . count($trajectory) . " state points generated).\n\n";
 
-// 3. Export CZML for 3D visualization
 $writer = new CzmlWriter();
-$czmlContent = $writer->export('SAT-LEO-01', $trajectory);
-$outFile = __DIR__ . '/../orbit.czml';
-file_put_contents($outFile, $czmlContent);
+$czmlJson = $writer->export('SAT-LEO-01', $trajectory);
+file_put_contents(__DIR__ . '/../orbit.czml', $czmlJson);
 
 echo "Trajectory written to: orbit.czml\n";
-echo "Drop this file into https://sandcastle.cesium.com/ to render in 3D.\n";
