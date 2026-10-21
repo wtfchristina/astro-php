@@ -1,0 +1,22 @@
+{
+    "name": "wtfchristina/astro-php",
+    "description": "High-fidelity numerical orbit propagator and orbital mechanics engine in modern PHP",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Astro\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Astro\\Tests\\": "tests/"
+        }
+    },
+    "require": {
+        "php": ">=8.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    }
+}
