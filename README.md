@@ -15,6 +15,7 @@ It executes high-fidelity Cowell-method numerical orbital propagation, geopotent
 * **Two-Body Gravity:** WGS84 standard central force acceleration ($\mu = 3.986004418 \times 10m{14} \text{ m}^3\/text{s}^2$).
 * **Geopotential Oblateness ($J_2$):** Earth oblateness driving secular precession of the Right Ascension of the Ascending Node ($\Omega$) and Argument of Perigee ($\omega$).
 * **Kepler Solver:** Newton-Raphson iteration solving Kepler's Equation to convert orbital elements into Cartesian state vectors in the ECI frame.
+* **Atmospheric Drag:** Exponential density profile with rotating Earth atmosphere coupling ($\mathbf{a}_{	ext{drag}} = -rac{1}{2}ho v_{	ext{rel}}^2 rac{C_D A}{m} \hat{\mathbf{v}}_{	ext{rel}}$).
 * **Numerical Integration:** Explicit 4th-Order Runge-Kuta (RK4) vector solver.
 * **Visualization:** Exports standard Cesium CZML ephemeris streams for 3D browser rendering.
 
