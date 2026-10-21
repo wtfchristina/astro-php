@@ -26,6 +26,12 @@ final class CzmlWriter
                 'id' => $satelliteId,
                 'name' => $satelliteId,
                 'availability' => "{$startEpoch}/{$endEpoch}",
+                'point' => [
+                    'pixelSize' => 10,
+                    'color' => ['rgba' => [255, 230, 0, 255]],
+                    'outlineColor' => ['rgba' => [255, 255, 255, 255]],
+                    'outlineWidth' => 2,
+                ],
                 'path' => [
                     'material' => [
                         'solidColor' => [
@@ -33,8 +39,8 @@ final class CzmlWriter
                         ]
                     ],
                     'width' => 2,
-                    'leadTime' => 7200,
-                    'trailTime' => 7200,
+                    'leadTime' => 86400,
+                    'trailTime' => 86400,
                     'resolution' => 60,
                 ],
                 'position' => [
