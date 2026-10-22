@@ -73,7 +73,7 @@ final class CzmlWriter
                     ],
                     'material' => ['solidColor' => ['color' => ['rgba' => [255, 140, 0, 180]]]],
                     'width' => 1.5,
-                    'clampToGround' => true,
+                    'arcType' => 'NONE',
                 ]
             ]
         ];
@@ -234,9 +234,9 @@ final class CzmlWriter
             $pos = $point['state']->position;
 
             $data[] = $offset;
-            $data[] = round($pos->x, 3);
-            $data[] = round($pos->y, 3);
-            $data[] = round($pos->z, 3);
+            $data[] = round($pos->x * 1000.0, 3);
+            $data[] = round($pos->y * 1000.0, 3);
+            $data[] = round($pos->z * 1000.0, 3);
         }
 
         return $data;
@@ -255,7 +255,7 @@ final class CzmlWriter
 
             $coords[] = round($geo->longitudeDeg, 4);
             $coords[] = round($geo->latitudeDeg, 4);
-            $coords[] = 0.0;
+            $coords[] = 15000.0;
         }
 
         return $coords;
