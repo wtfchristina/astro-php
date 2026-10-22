@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>AstroPHP 3D Mission Flight & Telemetry Viewer</title>
+  <title>AstroPHP 3D Mission Flight & Constellation Viewer</title>
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   <style>
@@ -12,7 +12,7 @@
       top: 15px;
       left: 15px;
       padding: 14px 18px;
-      background: rgba(10, 15, 25, 0.85);
+      background: rgba(10, 15, 25, 0.88);
       border: 1px solid rgba(0, 220, 255, 0.4);
       border-radius: 6px;
       color: #00e5ff;
@@ -20,7 +20,7 @@
       font-size: 12px;
       line-height: 1.6;
       box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-      pointer-events: none;
+      pointer-events: auto;
       z-index: 999;
     }
     #telemetryHud .hud-title {
@@ -32,16 +32,30 @@
       padding-bottom: 4px;
     }
     #telemetryHud .val { color: #ffffff; }
+    .toggle-btn {
+      margin-top: 10px;
+      background: rgba(0, 220, 255, 0.2);
+      border: 1px solid #00e5ff;
+      color: #fff;
+      padding: 5px 10px;
+      font-family: monospace;
+      font-size: 11px;
+      border-radius: 3px;
+      cursor: pointer;
+      width: 100%;
+    }
+    .toggle-btn:hover { background: rgba(0, 220, 255, 0.4); }
   </style>
 </head>
 <body>
   <div id="telemetryHud">
-    <div class="hud-title">ASTRO-PHP MISSION TELEMETRY</div>
+    <div class="hud-title">ASTRO-PHP MISSION HUD</div>
+    <div>VIEW: <span id="currentView" class="val">Single Spacecraft (LEO-01)</span></div>
     <div>UTC EPOCH: <span id="hudEpoch" class="val">--</span></div>
-    <div>VEHICLE: <span class="val">SAT-LEO-01 (SSO)</span></div>
     <div>ALTITUDE: <span id="hudAlt" class="val">--</span> km</div>
     <div>SUB-LAT: <span id="hudLat" class="val">--</span>°</div>
     <div>SUB-LON: <span id="hudLon" class="val">--</span>°</div>
+    <button class="toggle-btn" id="toggleMode">Switch to Walker-Delta Constellation</button>
   </div>
   <div id="cesiumContainer"></div>
   <script>
@@ -59,16 +73,33 @@
       viewer.imageryLayers.addImageryProvider(provider);
     });
 
+    let currentSource = null;
     let satEntity = null;
+    let isConstellationMode = false;
 
-    fetch('orbit.czml')
-      .then(res => res.json())
-      .then(czml => viewer.dataSources.add(Cesium.CzmlDataSource.load(czml)))
-      .then(dataSource => {
-        viewer.zoomTo(dataSource);
-        satEntity = dataSource.entities.getById('SAT-LEO-01');
-      })
-      .catch(err => console.error("Error loading CZML:", err));
+    function loadDataset(filename, isConstellation) {
+      if (currentSource) {
+        viewer.dataSources.remove(currentSource);
+      }
+      fetch(filename)
+        .then(res => res.json())
+        .then(czml => viewer.dataSources.add(Cesium.CzmlDataSource.load(czml)))
+        .then(dataSource => {
+          currentSource = dataSource;
+          viewer.zoomTo(dataSource);
+          satEntity = dataSource.entities.getById('SAT-LEO-01') || dataSource.entities.getById('SAT-P01-S01');
+          document.getElementById('currentView').innerText = isConstellation ? 'Walker 12/3/1 Mesh' : 'SAT-LEO-01';
+        })
+        .catch(err => console.error("Error loading " + filename + ":", err));
+    }
+
+    loadDataset('orbit.czml', false);
+
+    document.getElementById('toggleMode').addEventListener('click', () => {
+      isConstellationMode = !isConstellationMode;
+      document.getElementById('toggleMode').innerText = isConstellationMode ? 'Switch to Single Satellite' : 'Switch to Walker Constellation';
+      loadDataset(isConstellationMode ? 'constellation.czml' : 'orbit.czml', isConstellationMode);
+    });
 
     viewer.scene.postRender.addEventListener(() => {
       if (!satEntity) return;

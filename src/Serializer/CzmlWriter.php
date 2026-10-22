@@ -51,11 +51,7 @@ final class CzmlWriter
                     'outlineWidth' => 2,
                 ],
                 'path' => [
-                    'material' => [
-                        'solidColor' => [
-                            'color' => ['rgba' => [0, 220, 255, 255]]
-                        ]
-                    ],
+                    'material' => ['solidColor' => ['color' => ['rgba' => [0, 220, 255, 255]]]],
                     'width' => 2,
                     'leadTime' => 86400,
                     'trailTime' => 86400,
@@ -75,18 +71,13 @@ final class CzmlWriter
                     'positions' => [
                         'cartographicDegrees' => $this->buildGroundTrackCartographic($trajectory, $startEpoch, $initialGmstRad),
                     ],
-                    'material' => [
-                        'solidColor' => [
-                            'color' => ['rgba' => [255, 140, 0, 180]]
-                        ]
-                    ],
+                    'material' => ['solidColor' => ['color' => ['rgba' => [255, 140, 0, 180]]]],
                     'width' => 1.5,
                     'clampToGround' => true,
                 ]
             ]
         ];
 
-        // Ground station markers
         foreach ($stations as $station) {
             $stationId = 'GS-' . preg_replace('/[^a-zA-Z0-9_-]/', '', $station->name);
             $czml[] = [
@@ -118,7 +109,6 @@ final class CzmlWriter
             ];
         }
 
-        // Active RF Comms Vector Links during AOS-LOS intervals
         $passIndex = 0;
         foreach ($passes as $p) {
             $stationId = 'GS-' . preg_replace('/[^a-zA-Z0-9_-]/', '', $p->stationName);
@@ -127,12 +117,7 @@ final class CzmlWriter
                 'name' => "RF Link [{$p->stationName}]",
                 'availability' => "{$p->aosEpoch}/{$p->losEpoch}",
                 'polyline' => [
-                    'positions' => [
-                        'references' => [
-                            "{$satelliteId}#position",
-                            "{$stationId}#position"
-                        ]
-                    ],
+                    'positions' => ['references' => ["{$satelliteId}#position", "{$stationId}#position"]],
                     'material' => [
                         'polylineGlow' => [
                             'color' => ['rgba' => [0, 255, 120, 255]],
@@ -144,6 +129,96 @@ final class CzmlWriter
                 ]
             ];
             $passIndex++;
+        }
+
+        return json_encode($czml, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * @param array<string, list<array{epoch: string, state: StateVector}>> $trajectories
+     * @param list<array{satA: string, satB: string}> $staticLinks
+     */
+    public function exportConstellation(array $trajectories, array $staticLinks = []): string
+    {
+        $firstKey = array_key_first($trajectories);
+        $startEpoch = $trajectories[$firstKey][0]['epoch'];
+        $endEpoch = end($trajectories[$firstKey])['epoch'];
+
+        $czml = [
+            [
+                'id' => 'document',
+                'name' => 'AstroPHP Walker-Delta Constellation & ISL Mesh',
+                'version' => '1.0',
+            ]
+        ];
+
+        $planeColors = [
+            ['rgba' => [0, 229, 255, 255]],
+            ['rgba' => [255, 170, 0, 255]],
+            ['rgba' => [180, 0, 255, 255]],
+            ['rgba' => [0, 255, 128, 255]],
+        ];
+
+        foreach ($trajectories as $satId => $traj) {
+            preg_match('/P(\d+)/', $satId, $matches);
+            $planeIdx = isset($matches[1]) ? (((int)$matches[1] - 1) % count($planeColors)) : 0;
+            $color = $planeColors[$planeIdx];
+
+            $czml[] = [
+                'id' => $satId,
+                'name' => $satId,
+                'availability' => "{$startEpoch}/{$endEpoch}",
+                'point' => [
+                    'pixelSize' => 8,
+                    'color' => $color,
+                    'outlineColor' => ['rgba' => [255, 255, 255, 255]],
+                    'outlineWidth' => 1,
+                ],
+                'label' => [
+                    'text' => $satId,
+                    'font' => '10pt monospace',
+                    'fillColor' => $color,
+                    'outlineColor' => ['rgba' => [0, 0, 0, 255]],
+                    'outlineWidth' => 2,
+                    'pixelOffset' => ['cartesian2' => [0, -12]],
+                    'horizontalOrigin' => 'CENTER',
+                ],
+                'path' => [
+                    'material' => ['solidColor' => ['color' => $color]],
+                    'width' => 1.2,
+                    'leadTime' => 5400,
+                    'trailTime' => 5400,
+                    'resolution' => 60,
+                ],
+                'position' => [
+                    'referenceFrame' => 'INERTIAL',
+                    'epoch' => $startEpoch,
+                    'cartesian' => $this->flattenCartesian($traj, $startEpoch),
+                ],
+            ];
+        }
+
+        $linkIndex = 0;
+        foreach ($staticLinks as $link) {
+            $satA = $link['satA'];
+            $satB = $link['satB'];
+            $czml[] = [
+                'id' => "ISL-{$satA}-{$satB}-{$linkIndex}",
+                'name' => "Optical ISL [{$satA} <-> {$satB}]",
+                'availability' => "{$startEpoch}/{$endEpoch}",
+                'polyline' => [
+                    'positions' => ['references' => ["{$satA}#position", "{$satB}#position"]],
+                    'material' => [
+                        'polylineGlow' => [
+                            'color' => ['rgba' => [0, 255, 180, 220]],
+                            'glowPower' => 0.2,
+                            'taperPower' => 0.8
+                        ]
+                    ],
+                    'width' => 1.8
+                ]
+            ];
+            $linkIndex++;
         }
 
         return json_encode($czml, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
