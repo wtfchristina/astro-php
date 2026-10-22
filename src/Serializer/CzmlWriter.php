@@ -66,29 +66,27 @@ final class CzmlWriter
                     'epoch' => $startEpoch,
                     'cartesian' => $this->flattenCartesian($trajectory, $startEpoch),
                 ],
+            ],
+            [
+                'id' => "{$satelliteId}-groundtrack",
+                'name' => "{$satelliteId} Ground Track",
+                'availability' => "{$startEpoch}/{$endEpoch}",
+                'polyline' => [
+                    'positions' => [
+                        'cartographicDegrees' => $this->buildGroundTrackCartographic($trajectory, $startEpoch, $initialGmstRad),
+                    ],
+                    'material' => [
+                        'solidColor' => [
+                            'color' => ['rgba' => [255, 140, 0, 180]]
+                        ]
+                    ],
+                    'width' => 1.5,
+                    'clampToGround' => true,
+                ]
             ]
         ];
 
-        // 1. Add Sub-Satellite Ground Track (Surface projection in WGS-84 fixed frame)
-        $czml[] = [
-            'id' => "{$satelliteId}-groundtrack",
-            'name' => "{$satelliteId} Ground Track",
-            'availability' => "{$startEpoch}/{$endEpoch}",
-            'polyline' => [
-                'positions' => [
-                    'cartographicDegrees' => $this->buildGroundTrackCartographic($trajectory, $startEpoch, $initialGmstRad),
-                ],
-                'material' => [
-                    'solidColor' => [
-                        'color' => ['rgba' => [255, 140, 0, 180]]
-                    ]
-                ],
-                'width' => 1.5,
-                'clampToGround' => true,
-            ]
-        ];
-
-        // 2. Add Ground Station entities
+        // Ground station markers
         foreach ($stations as $station) {
             $stationId = 'GS-' . preg_replace('/[^a-zA-Z0-9_-]/', '', $station->name);
             $czml[] = [
@@ -120,13 +118,37 @@ final class CzmlWriter
             ];
         }
 
+        // Active RF Comms Vector Links during AOS-LOS intervals
+        $passIndex = 0;
+        foreach ($passes as $p) {
+            $stationId = 'GS-' . preg_replace('/[^a-zA-Z0-9_-]/', '', $p->stationName);
+            $czml[] = [
+                'id' => "LINK-{$stationId}-{$passIndex}",
+                'name' => "RF Link [{$p->stationName}]",
+                'availability' => "{$p->aosEpoch}/{$p->losEpoch}",
+                'polyline' => [
+                    'positions' => [
+                        'references' => [
+                            "{$satelliteId}#position",
+                            "{$stationId}#position"
+                        ]
+                    ],
+                    'material' => [
+                        'polylineGlow' => [
+                            'color' => ['rgba' => [0, 255, 120, 255]],
+                            'glowPower' => 0.25,
+                            'taperPower' => 0.5
+                        ]
+                    ],
+                    'width' => 3
+                ]
+            ];
+            $passIndex++;
+        }
+
         return json_encode($czml, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
     }
 
-    /**
-     * @param list<array{epoch: string, state: StateVector}> $trajectory
-     * @return list<float>
-     */
     private function flattenCartesian(array $trajectory, string $startEpoch): array
     {
         $data = [];
@@ -145,10 +167,6 @@ final class CzmlWriter
         return $data;
     }
 
-    /**
-     * @param list<array{epoch: string, state: StateVector}> $trajectory
-     * @return list<float>
-     */
     private function buildGroundTrackCartographic(array $trajectory, string $startEpoch, float $initialGmstRad): array
     {
         $coords = [];
@@ -162,7 +180,7 @@ final class CzmlWriter
 
             $coords[] = round($geo->longitudeDeg, 4);
             $coords[] = round($geo->latitudeDeg, 4);
-            $coords[] = 0.0; // Clamped to Earth surface
+            $coords[] = 0.0;
         }
 
         return $coords;

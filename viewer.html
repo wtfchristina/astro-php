@@ -2,14 +2,47 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>AstroPHP 3D Orbit Viewer</title>
+  <title>AstroPHP 3D Mission Flight & Telemetry Viewer</title>
   <script src="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Cesium.js"></script>
   <link href="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
   <style>
     html, body, #cesiumContainer { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; background: #000; }
+    #telemetryHud {
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      padding: 14px 18px;
+      background: rgba(10, 15, 25, 0.85);
+      border: 1px solid rgba(0, 220, 255, 0.4);
+      border-radius: 6px;
+      color: #00e5ff;
+      font-family: 'SF Mono', Monaco, Inconsolata, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+      pointer-events: none;
+      z-index: 999;
+    }
+    #telemetryHud .hud-title {
+      font-weight: bold;
+      font-size: 13px;
+      color: #ffffff;
+      margin-bottom: 6px;
+      border-bottom: 1px solid rgba(0, 220, 255, 0.25);
+      padding-bottom: 4px;
+    }
+    #telemetryHud .val { color: #ffffff; }
   </style>
 </head>
 <body>
+  <div id="telemetryHud">
+    <div class="hud-title">ASTRO-PHP MISSION TELEMETRY</div>
+    <div>UTC EPOCH: <span id="hudEpoch" class="val">--</span></div>
+    <div>VEHICLE: <span class="val">SAT-LEO-01 (SSO)</span></div>
+    <div>ALTITUDE: <span id="hudAlt" class="val">--</span> km</div>
+    <div>SUB-LAT: <span id="hudLat" class="val">--</span>°</div>
+    <div>SUB-LON: <span id="hudLon" class="val">--</span>°</div>
+  </div>
   <div id="cesiumContainer"></div>
   <script>
     const viewer = new Cesium.Viewer("cesiumContainer", {
@@ -26,11 +59,31 @@
       viewer.imageryLayers.addImageryProvider(provider);
     });
 
+    let satEntity = null;
+
     fetch('orbit.czml')
       .then(res => res.json())
       .then(czml => viewer.dataSources.add(Cesium.CzmlDataSource.load(czml)))
-      .then(dataSource => viewer.zoomTo(dataSource))
+      .then(dataSource => {
+        viewer.zoomTo(dataSource);
+        satEntity = dataSource.entities.getById('SAT-LEO-01');
+      })
       .catch(err => console.error("Error loading CZML:", err));
+
+    viewer.scene.postRender.addEventListener(() => {
+      if (!satEntity) return;
+      const time = viewer.clock.currentTime;
+      const position = satEntity.position.getValue(time);
+      if (position) {
+        const carto = Cesium.Ellipsoid.WGS84.cartesianToCartographic(position);
+        if (carto) {
+          document.getElementById('hudEpoch').innerText = Cesium.JulianDate.toIso8601(time);
+          document.getElementById('hudLat').innerText = Cesium.Math.toDegrees(carto.latitude).toFixed(3);
+          document.getElementById('hudLon').innerText = Cesium.Math.toDegrees(carto.longitude).toFixed(3);
+          document.getElementById('hudAlt').innerText = (carto.height / 1000.0).toFixed(2);
+        }
+      }
+    });
   </script>
 </body>
 </html>
