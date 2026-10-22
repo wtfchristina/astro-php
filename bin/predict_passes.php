@@ -9,7 +9,7 @@ use Astro\Coordinate\Vector3;
 use Astro\Coordinate\Wgs84Transformer;
 use Astro\Force\AtmosphericDrag;
 use Astro\Force\GeopotentialJ2;
-use Astro\Force\TwoBodyGravity;
+use Astro\Force\EarthGravityModel;
 use Astro\GroundStation\DopplerCalculator;
 use Astro\GroundStation\GroundStation;
 use Astro\GroundStation\PassScheduleService;
@@ -27,7 +27,7 @@ $stations = [
 
 $elements = new KeplerianElements(7078.137, 0.001, 98.2, 45.0, 0.0, 0.0);
 $initialState = $elements->toStateVector();
-$forces = [new TwoBodyGravity(), new GeopotentialJ2(), new AtmosphericDrag(0.015)];
+$forces = [new EarthGravityModel(), new GeopotentialJ2(), new AtmosphericDrag(0.015)];
 $integrator = new RungeKutta4($forces);
 
 $epoch = new DateTimeImmutable('2026-10-21T22:00:00Z');
