@@ -13,18 +13,18 @@ final class J2PrecessionTest extends TestCase
 {
     public function testSunSynchronousNodalPrecession(): void
     {
-        $altitude = 800_000.0;
+        $altitude = 800.0;
         $semiMajorAxis = EarthGravityModel::R_EARTH + $altitude;
-        $inclination = deg2rad(98.6);
+        $inclinationDeg = 98.6;
         $eccentricity = 0.001;
 
         $orbit = new KeplerianElements(
-            semiMajorAxis: $semiMajorAxis,
-            eccentricity: $eccentricity,
-            inclination: $inclination,
-            raan: deg2rad(0.0),
-            argPerigee: deg2rad(0.0),
-            meanAnomaly: deg2rad(0.0)
+            $semiMajorAxis,
+            $eccentricity,
+            $inclinationDeg,
+            0.0,
+            0.0,
+            0.0
         );
 
         $initialState = $orbit->toStateVector();
@@ -44,11 +44,11 @@ final class J2PrecessionTest extends TestCase
 
         $meanMotion = sqrt(EarthGravityModel::MU / ($semiMajorAxis ** 3));
         $p = $semiMajorAxis * (1.0 - ($eccentricity ** 2));
-        $expectedRaanRateRadPerSec = -1.5 * EarthGravityModel::J2 
-            * (EarthGravityModel::R_EARTH / $p) ** 2 
-            * $meanMotion * cos($inclination);
-        
-        $expectedPrecessionDegPerDay = rad2deg($expectedRaanRateRadPerSec * 86400.0);
+        $expectedRaanRateRadPerSec = -1.5 * EarthGravityModel::J2
+            * (EarthGravityModel::R_EARTH / $p) ** 2
+            * $meanMotion * cos(deg2rad($inclinationDeg));
+
+        $expectedPrecessionDegPerDay = abs(rad2deg($expectedRaanRateRadPerSec)) * 86400.0;
 
         $this->assertEqualsWithDelta(0.9856, $expectedPrecessionDegPerDay, 0.05);
     }
