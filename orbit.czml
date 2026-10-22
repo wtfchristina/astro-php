@@ -10412,7 +10412,7 @@
                 }
             },
             "width": 2,
-            "arcType": "GEODESIC"
+            "arcType": "NONE"
         }
     },
     {
@@ -12543,7 +12543,7 @@
                 }
             },
             "width": 2,
-            "arcType": "GEODESIC"
+            "arcType": "NONE"
         }
     },
     {

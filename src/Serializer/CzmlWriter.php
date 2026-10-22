@@ -78,7 +78,7 @@ final class CzmlWriter
                     ],
                     "material" => ["solidColor" => ["color" => ["rgba" => [255, 140, 0, 200]]]],
                     "width" => 2.0,
-                    "arcType" => "GEODESIC",
+                    "arcType" => "NONE",
                 ],
             ];
         }
