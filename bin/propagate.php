@@ -7,15 +7,15 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use Astro\Coordinate\KeplerianElements;
 use Astro\Force\AtmosphericDrag;
 use Astro\Force\GeopotentialJ2;
-use Astro\Force\TwoBodyGravity;
+use Astro\Force\SolarRadiationPressure;
 use Astro\GroundStation\GroundStation;
 use Astro\GroundStation\PassScheduleService;
 use Astro\Integrator\RungeKutta4;
 use Astro\Serializer\CzmlWriter;
 
-echo "=================================================\n";
-echo " AstroPHP: Multi-Force Cowell Propagator (J2 + Drag)\n";
-echo "=================================================\n\n";
+echo "========================================================================\n";
+echo " AstroPHP: Multi-Force Cowell Propagator (J2 + Drag + Solar Radiation)\n";
+echo "========================================================================\n\n";
 
 $stations = [
     new GroundStation('Phoenix Ground Station (PHX)', 33.4484, -112.0740, 0.331, 10.0),
@@ -27,9 +27,9 @@ $elements = new KeplerianElements(7078.137, 0.001, 98.2, 45.0, 0.0, 0.0);
 $initialState = $elements->toStateVector();
 
 $forces = [
-    new TwoBodyGravity(),
     new GeopotentialJ2(),
     new AtmosphericDrag(0.015),
+    new SolarRadiationPressure(1.3, 0.02),
 ];
 
 $integrator = new RungeKutta4($forces);
@@ -71,4 +71,4 @@ $writer = new CzmlWriter();
 $czmlJson = $writer->export('SAT-LEO-01', $trajectory, $stations, $allPasses, 0.0);
 file_put_contents(__DIR__ . '/../orbit.czml', $czmlJson);
 
-echo "Trajectory and Ground Track written to: orbit.czml\n";
+echo "Updated trajectory and ground tracks written to: orbit.czml\n";
