@@ -6,6 +6,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use Astro\Coordinate\KeplerianElements;
 use Astro\Force\AtmosphericDrag;
+use Astro\Force\CompositeForceModel;
 use Astro\Force\EarthGravityModel;
 use Astro\Force\SolarRadiationPressure;
 use Astro\GroundStation\GroundStation;
@@ -26,13 +27,13 @@ $stations = [
 $elements = new KeplerianElements(7078.137, 0.001, 98.2, 45.0, 0.0, 0.0);
 $initialState = $elements->toStateVector();
 
-$forces = [
+$forceModel = new CompositeForceModel(
     new EarthGravityModel(),
     new AtmosphericDrag(0.015),
-    new SolarRadiationPressure(1.3, 0.02),
-];
+    new SolarRadiationPressure(1.3, 0.02)
+);
 
-$integrator = new RungeKutta4($forces);
+$integrator = new RungeKutta4($forceModel);
 
 $epoch = new DateTimeImmutable('2026-10-21T22:00:00Z');
 $periodSeconds = 2.0 * M_PI * sqrt((7078.137 ** 3) / 398600.4418);
