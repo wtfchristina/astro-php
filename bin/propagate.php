@@ -6,7 +6,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 use Astro\Coordinate\KeplerianElements;
 use Astro\Force\AtmosphericDrag;
-use Astro\Force\GeopotentialJ2;
+use Astro\Force\EarthGravityModel;
 use Astro\Force\SolarRadiationPressure;
 use Astro\GroundStation\GroundStation;
 use Astro\GroundStation\PassScheduleService;
@@ -27,7 +27,7 @@ $elements = new KeplerianElements(7078.137, 0.001, 98.2, 45.0, 0.0, 0.0);
 $initialState = $elements->toStateVector();
 
 $forces = [
-    new GeopotentialJ2(),
+    new EarthGravityModel(),
     new AtmosphericDrag(0.015),
     new SolarRadiationPressure(1.3, 0.02),
 ];
