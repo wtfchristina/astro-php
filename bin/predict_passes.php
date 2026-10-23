@@ -5,7 +5,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Astro\Coordinate\KeplerianElements;
-use Astro\Coordinate\Vector3;
 use Astro\Coordinate\Wgs84Transformer;
 use Astro\Force\EarthGravityModel;
 use Astro\GroundStation\GroundStation;
@@ -21,6 +20,7 @@ $stations = [
     new GroundStation('SGS - Svalbard Satellite Station', 78.2298, 15.4078, 0.400, 5.0),
 ];
 
+// LEO SSO 700 km altitude, 98.2° inclination, RAAN 45°
 $orbit = new KeplerianElements(
     EarthGravityModel::R_EARTH + 700.0,
     0.001,
@@ -38,21 +38,21 @@ $transformer = new Wgs84Transformer();
 
 $startEpoch = time();
 $durationSec = 86400; // 24-hour simulation horizon
-$dt = 15.0;           // 15-second integration steps
+$dt = 10.0;           // 10-second propagation step
 
-// IAU-82 GMST calculation function (returns radians)
+// Standard IAU GMST calculation including full diurnal Earth rotation
 $calcGmstRad = function (int $unixTimestamp): float {
     $jd = ($unixTimestamp / 86400.0) + 2440587.5;
-    $t = ($jd - 2451545.0) / 36525.0;
-    $thetaSec = 24110.54841 + 8640184.812866 * $t + 0.093104 * ($t ** 2) - 0.0000062 * ($t ** 3);
-    $thetaDeg = fmod($thetaSec / 240.0, 360.0);
-    if ($thetaDeg < 0) {
-        $thetaDeg += 360.0;
+    $d = $jd - 2451545.0; // Days since J2000.0
+    // GMST in degrees = 280.46061837 + 360.98564736629 * d
+    $gmstDeg = fmod(280.46061837 + 360.98564736629 * $d, 360.0);
+    if ($gmstDeg < 0.0) {
+        $gmstDeg += 360.0;
     }
-    return deg2rad($thetaDeg);
+    return deg2rad($gmstDeg);
 };
 
-// Numerical Propagation Loop
+// Numerical Propagation & Trajectory Cache
 $trajectory = [];
 $simTime = 0.0;
 $currentState = $state;
@@ -64,7 +64,7 @@ while ($simTime <= $durationSec) {
 
     $trajectory[] = [
         'epoch' => $currentEpoch,
-        'ecef' => $ecefPos,
+        'ecef'  => $ecefPos,
     ];
 
     $currentState = $integrator->step($currentState, $simTime, $dt);
@@ -88,12 +88,7 @@ foreach ($stations as $station) {
 
     foreach ($trajectory as $point) {
         $look = $predictor->calculateLookAngles($station, $point['ecef']);
-        $rawElev = is_array($look) 
-            ? ($look['elevation'] ?? $look['elevationDeg'] ?? 0.0) 
-            : ($look->elevation ?? $look->elevationDeg ?? 0.0);
-
-        // Standardize to degrees if returned in radians
-        $elevation = abs($rawElev) <= M_PI ? rad2deg($rawElev) : $rawElev;
+        $elevation = $look->elevationDeg; // Directly use elevation in degrees
 
         if ($elevation >= $station->minElevationDeg) {
             if (!$inPass) {
@@ -110,9 +105,9 @@ foreach ($stations as $station) {
                 $duration = $losEpoch - $aosEpoch;
                 if ($duration >= 60) {
                     $passes[] = [
-                        'aosEpoch' => $aosEpoch,
-                        'losEpoch' => $losEpoch,
-                        'duration' => $duration,
+                        'aosEpoch'     => $aosEpoch,
+                        'losEpoch'     => $losEpoch,
+                        'duration'     => $duration,
                         'maxElevation' => $maxElev,
                     ];
                 }
