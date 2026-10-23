@@ -7,87 +7,132 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use Astro\Coordinate\KeplerianElements;
 use Astro\Coordinate\Vector3;
 use Astro\Coordinate\Wgs84Transformer;
-use Astro\Force\AtmosphericDrag;
-use Astro\Force\GeopotentialJ2;
 use Astro\Force\EarthGravityModel;
-use Astro\GroundStation\DopplerCalculator;
 use Astro\GroundStation\GroundStation;
-use Astro\GroundStation\PassScheduleService;
+use Astro\GroundStation\PassPredictor;
 use Astro\Integrator\RungeKutta4;
 
-echo "========================================================================================\n";
-echo " AstroPHP: Ground Station Contact Pass & S-Band Doppler Analysis (AOS / TCA / LOS)\n";
-echo "========================================================================================\n\n";
+echo "========================================================================\n";
+echo " AstroPHP: Ground Station Access Window & Elevation Profiler\n";
+echo "========================================================================\n\n";
 
 $stations = [
-    new GroundStation('Phoenix Ground Station (PHX)', 33.4484, -112.0740, 0.331, 10.0),
-    new GroundStation('Svalbard Satellite Station (SGS)', 78.2297, 15.4077, 0.400, 5.0),
-    new GroundStation('Goldstone Deep Space Comm (GDS)', 35.4266, -116.8900, 1.000, 10.0),
+    new GroundStation('PHX - Phoenix Ground Station', 33.4484, -112.0740, 0.331, 10.0),
+    new GroundStation('SGS - Svalbard Satellite Station', 78.2298, 15.4078, 0.400, 5.0),
 ];
 
-$elements = new KeplerianElements(7078.137, 0.001, 98.2, 45.0, 0.0, 0.0);
-$initialState = $elements->toStateVector();
-$forces = [new EarthGravityModel(), new GeopotentialJ2(), new AtmosphericDrag(0.015)];
-$integrator = new RungeKutta4($forces);
+$orbit = new KeplerianElements(
+    EarthGravityModel::R_EARTH + 700.0,
+    0.001,
+    98.2,
+    45.0,
+    0.0,
+    0.0
+);
 
-$epoch = new DateTimeImmutable('2026-10-21T22:00:00Z');
-$totalDuration = 86400.0;
-$stepSize = 10.0;
+$state = $orbit->toStateVector();
+$forceModel = new EarthGravityModel();
+$integrator = new RungeKutta4($forceModel);
+$predictor = new PassPredictor();
+$transformer = new Wgs84Transformer();
 
-echo "Propagating 24-hour mission window (86,400s, dt=10s)...\n";
-$startBenchmark = hrtime(true);
+$startEpoch = time();
+$durationSec = 86400; // 24-hour simulation horizon
+$dt = 15.0;           // 15-second integration steps
 
+// IAU-82 GMST calculation function (returns radians)
+$calcGmstRad = function (int $unixTimestamp): float {
+    $jd = ($unixTimestamp / 86400.0) + 2440587.5;
+    $t = ($jd - 2451545.0) / 36525.0;
+    $thetaSec = 24110.54841 + 8640184.812866 * $t + 0.093104 * ($t ** 2) - 0.0000062 * ($t ** 3);
+    $thetaDeg = fmod($thetaSec / 240.0, 360.0);
+    if ($thetaDeg < 0) {
+        $thetaDeg += 360.0;
+    }
+    return deg2rad($thetaDeg);
+};
+
+// Numerical Propagation Loop
 $trajectory = [];
-$t = 0.0;
-$state = $initialState;
+$simTime = 0.0;
+$currentState = $state;
 
-while ($t <= $totalDuration) {
+while ($simTime <= $durationSec) {
+    $currentEpoch = $startEpoch + (int)$simTime;
+    $gmst = $calcGmstRad($currentEpoch);
+    $ecefPos = $transformer->eciToEcef($currentState->position, $gmst);
+
     $trajectory[] = [
-        'epoch' => $epoch->modify('+' . (int)round($t) . ' seconds')->format('Y-m-d\TH:i:s\Z'),
-        'state' => $state,
+        'epoch' => $currentEpoch,
+        'ecef' => $ecefPos,
     ];
-    $state = $integrator->step($state, $t, $stepSize);
-    $t += $stepSize;
+
+    $currentState = $integrator->step($currentState, $simTime, $dt);
+    $simTime += $dt;
 }
 
-$simElapsedMs = (hrtime(true) - $startBenchmark) / 1e6;
-echo "Propagation completed in " . number_format($simElapsedMs, 2) . " ms (" . count($trajectory) . " state vectors).\n\n";
-
-$passService = new PassScheduleService();
-$dopplerCalc = new DopplerCalculator();
-$transformer = new Wgs84Transformer();
-$carrierFrequencyHz = 2.2e9; // 2.2 GHz S-band carrier
-
 foreach ($stations as $station) {
-    echo "----------------------------------------------------------------------------------------\n";
-    echo " Target: {$station->name} (Min El: {$station->minElevationDeg}°, Carrier: 2.2 GHz)\n";
-    echo "----------------------------------------------------------------------------------------\n";
+    printf("Target Facility: %s\n", $station->name);
+    printf("Location: %.4f° Lat, %.4f° Lon, %.3f km Alt | Mask: %.1f°\n",
+        $station->latitudeDeg,
+        $station->longitudeDeg,
+        $station->altitudeKm,
+        $station->minElevationDeg
+    );
+    echo "------------------------------------------------------------------------\n";
 
-    $passes = $passService->findPasses($station, $trajectory, 0.0);
+    $passes = [];
+    $inPass = false;
+    $aosEpoch = 0;
+    $maxElev = 0.0;
+
+    foreach ($trajectory as $point) {
+        $look = $predictor->calculateLookAngles($station, $point['ecef']);
+        $rawElev = is_array($look) 
+            ? ($look['elevation'] ?? $look['elevationDeg'] ?? 0.0) 
+            : ($look->elevation ?? $look->elevationDeg ?? 0.0);
+
+        // Standardize to degrees if returned in radians
+        $elevation = abs($rawElev) <= M_PI ? rad2deg($rawElev) : $rawElev;
+
+        if ($elevation >= $station->minElevationDeg) {
+            if (!$inPass) {
+                $inPass = true;
+                $aosEpoch = $point['epoch'];
+                $maxElev = $elevation;
+            } elseif ($elevation > $maxElev) {
+                $maxElev = $elevation;
+            }
+        } else {
+            if ($inPass) {
+                $inPass = false;
+                $losEpoch = $point['epoch'];
+                $duration = $losEpoch - $aosEpoch;
+                if ($duration >= 60) {
+                    $passes[] = [
+                        'aosEpoch' => $aosEpoch,
+                        'losEpoch' => $losEpoch,
+                        'duration' => $duration,
+                        'maxElevation' => $maxElev,
+                    ];
+                }
+            }
+        }
+    }
 
     if (empty($passes)) {
-        echo " No contact windows detected within this 24-hour horizon.\n\n";
+        echo " No contact windows predicted within the 24-hour horizon.\n\n";
         continue;
     }
 
-    printf(
-        " %-20s | %-20s | %-8s | %-7s | %-9s | %-12s\n",
-        'AOS (UTC)', 'LOS (UTC)', 'Duration', 'Max El', 'Min Slant', 'Max Doppler'
-    );
-    printf(" %s\n", str_repeat('-', 90));
-
-    foreach ($passes as $p) {
-        // Approximate peak Doppler magnitude using satellite orbital speed projection (~7.5 km/s max)
-        $maxDopplerShift = $dopplerCalc->computeDopplerShift($carrierFrequencyHz, -7.0);
-
+    printf("%-22s  %-22s  %-12s  %-10s\n", "AOS (UTC)", "LOS (UTC)", "Duration", "Max Elev");
+    foreach (array_slice($passes, 0, 6) as $pass) {
         printf(
-            " %-20s | %-20s | %6.0fs | %5.1f°  | %7.1f km | ±%5.1f kHz\n",
-            $p->aosEpoch,
-            $p->losEpoch,
-            $p->durationSeconds,
-            $p->maxElevationDeg,
-            $p->minRangeKm,
-            abs($maxDopplerShift) / 1000.0
+            "%-22s  %-22s  %4d sec      %5.1f°\n",
+            gmdate('Y-m-d H:i:s\Z', $pass['aosEpoch']),
+            gmdate('Y-m-d H:i:s\Z', $pass['losEpoch']),
+            $pass['duration'],
+            $pass['maxElevation']
         );
     }
     echo "\n";
