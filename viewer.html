@@ -45,6 +45,37 @@
       width: 100%;
     }
     .toggle-btn:hover { background: rgba(0, 220, 255, 0.4); }
+  
+    /* --- Locked HUD Layout & Monospace Stabilization --- */
+    #hud, .hud-panel {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      width: 460px;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-sizing: border-box;
+      font-family: "SF Mono", Monaco, "JetBrains Mono", Menlo, Consolas, monospace !important;
+      font-variant-numeric: tabular-nums !important;
+      overflow: hidden;
+    }
+
+    #hud div, .hud-panel div, #hud p, .hud-panel p {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin: 2px 0;
+    }
+
+    .hud-btn {
+      width: 100%;
+      height: 36px;
+      margin-top: 10px;
+      flex-shrink: 0;
+      box-sizing: border-box;
+    }
   </style>
 </head>
 <body>
