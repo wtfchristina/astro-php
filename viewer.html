@@ -117,5 +117,64 @@
       }
     });
   </script>
+
+    <script>
+      let eventSource = null;
+      let liveSatEntity = null;
+      const streamBtn = document.getElementById("stream-btn");
+
+      if (streamBtn) {
+        streamBtn.addEventListener("click", () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+            streamBtn.textContent = "Engage Live SSE Stream";
+            streamBtn.style.borderColor = "#00e5ff";
+            return;
+          }
+
+          streamBtn.textContent = "Disconnect Live Stream";
+          streamBtn.style.borderColor = "#ff3366";
+
+          if (!liveSatEntity) {
+            liveSatEntity = viewer.entities.add({
+              id: "LIVE-SAT-LEO-01",
+              name: "SAT-LEO-01 (Live Stream)",
+              point: {
+                pixelSize: 12,
+                color: Cesium.Color.RED,
+                outlineColor: Cesium.Color.WHITE,
+                outlineWidth: 2,
+              },
+              label: {
+                text: "LIVE SAT-LEO-01",
+                font: "11pt monospace",
+                fillColor: Cesium.Color.RED,
+                pixelOffset: new Cesium.Cartesian2(0, -18),
+                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+              },
+            });
+          }
+
+          eventSource = new EventSource("/public/stream.php");
+          eventSource.addEventListener("telemetry", (e) => {
+            const data = JSON.parse(e.data);
+            const pos = Cesium.Cartesian3.fromElements(
+              data.positionKm.x * 1000.0,
+              data.positionKm.y * 1000.0,
+              data.positionKm.z * 1000.0
+            );
+
+            liveSatEntity.position = pos;
+
+            const altEl = document.getElementById("hud-alt");
+            const epochEl = document.getElementById("hud-epoch");
+            if (altEl) altEl.textContent = data.positionKm.altitudeKm.toFixed(2) + " km (LIVE)";
+            if (epochEl) epochEl.textContent = data.epochIso;
+          });
+        });
+      }
+    </script>
 </body>
+
 </html>
