@@ -177,8 +177,33 @@
     
     // Stabilize clock rate and sanitize HUD numbers
     if (typeof viewer !== "undefined" && viewer.clock) {
-      viewer.clock.multiplier = 5.0; // 5x real-time for smooth, readable orbital velocity
+      viewer.clock.multiplier = 1.0; // 5x real-time for smooth, readable orbital velocity
     }
+
+    
+    // --- HUD Refresh Throttling (4 Hz / 250ms) & Clock Lock ---
+    if (typeof viewer !== "undefined" && viewer.clock) {
+      viewer.clock.multiplier = 1.0; // 1 second sim = 1 second real time
+      viewer.clock.shouldAnimate = true;
+    }
+
+    let lastHudUpdateMs = 0;
+    const HUD_INTERVAL_MS = 250; // Update DOM at clean 4 Hz intervals
+
+    // Override or wrap the onTick handler safely
+    viewer.clock.onTick.addEventListener(function(clock) {
+      const now = performance.now();
+      if (now - lastHudUpdateMs < HUD_INTERVAL_MS) {
+        return;
+      }
+      lastHudUpdateMs = now;
+
+      // Clean ISO string to whole seconds
+      const iso = Cesium.JulianDate.toIso8601(clock.currentTime);
+      const cleanEpoch = iso.split(".")[0] + "Z";
+      const epochEl = document.getElementById("hud-epoch");
+      if (epochEl) epochEl.textContent = cleanEpoch;
+    });
 
     </script>
 </body>
